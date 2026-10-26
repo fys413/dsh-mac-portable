@@ -1,0 +1,45 @@
+name: verify
+
+# Static checks only. A full `./make.sh` run downloads Node + the whole npm
+# dependency tree and builds an .app, which is too slow (and too flaky on
+# shared runners) for every push; the release build is done manually.
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-13
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Tool versions
+        run: |
+          bash --version | head -n 1
+          python3 --version
+
+      - name: Syntax-check every shell script
+        run: |
+          for f in make.sh verify.sh scripts/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+          echo "sh -n make.sh"
+          sh -n make.sh
+
+      - name: Repository checks (no upstream bytes, no secrets, docs)
+        run: ./verify.sh
+
+      - name: make.sh --help stays read-only
+        run: |
+          ./make.sh --help | tee /tmp/make-help.txt
+          grep -q -- '--skip-fetch' /tmp/make-help.txt
+          grep -q -- '--no-sign' /tmp/make-help.txt
+          grep -q -- '--bundle-id' /tmp/make-help.txt
+          test ! -d build
+          test ! -d dist
+          test -z "$(git status --porcelain)"

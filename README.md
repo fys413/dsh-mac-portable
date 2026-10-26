@@ -19,6 +19,32 @@ on Intel x64 by downloading the official npm package at build time.*
 - 形态：`DSH.app`（POSIX sh 启动器 + 内置 Node + 内置 `node_modules`），双击后由启动器在
   `127.0.0.1` 随机端口拉起 `dsh web`，抓到一次性 token 地址后用浏览器打开
 
+## B 档一键构建（推荐）
+
+在 macOS 11+（Intel x64）上装好 Xcode Command Line Tools 后，一条命令完成全部五步：
+
+```sh
+git clone https://github.com/fys413/dsh-mac-portable.git
+cd dsh-mac-portable
+chmod +x make.sh scripts/*.sh verify.sh   # 从 zip 下载时可能丢失可执行位
+./make.sh            # 默认不签名；加 --sign 做 ad-hoc 签名
+```
+
+预期产物：
+
+- `build/DSH.app` —— 可双击的未签名应用；
+- `dist/DSH-Portable-0.1.0-macos11-x64.zip` —— app + `LICENSES/` + `THIRD_PARTY_NOTICES.md`；
+- `dist/SHA256SUMS` —— 校验和。
+
+常用参数：`--skip-fetch`（复用 `build/`，离线重打包）、`--clean`、`--sign`、`--dmg`、
+`--version X.Y.Z`、`--bundle-id ID`（默认 `io.github.<用户名>.dsh-mac-portable`，不得含
+`deepseek`）、`--proxy http://127.0.0.1:7890`；`./make.sh --help` 列出全部选项且不写任何文件。
+
+任何一步失败，`make.sh` 会打印**失败步骤、子脚本退出码、下一步提示**，并以该步的退出码
+退出（1=步骤失败，2=用法错误，3=`--skip-fetch` 时 `build/` 不完整，4=缺 `codesign`）。
+每一步都幂等，按提示处理后重跑即可。完整说明、预期产物和常见失败见
+[`docs/BUILD.md`](docs/BUILD.md) 的 B 档章节。
+
 ---
 
 ## 1. 这是什么 / 不是什么
@@ -67,10 +93,14 @@ cd dsh-mac-portable
 ```
 dsh-mac-portable/
 ├─ README.md                 # 本文件
+├─ make.sh                   # B 档入口：按序执行五步，失败即停并给提示
 ├─ LICENSE                   # MIT（自产部分）
 ├─ NOTICE.md                 # 版权归属、上游 MIT、修改声明清单
+├─ THIRD_PARTY_NOTICES.md    # 第三方组件、修改声明（sherpa minos）、LGPL 源码要约
+├─ LICENSES/                 # Apache-2.0 与 LGPL-3.0 全文（随 zip/dmg 分发）
 ├─ BRAND.md                  # 落实上游 BRAND_GUIDELINES 的命名/图标/声明规则
 ├─ CHANGELOG.md
+├─ .github/workflows/verify.yml  # CI：全部脚本 bash -n + verify.sh + 只读 --help
 ├─ .gitignore                # build/ dist/ *.zip DSH.app/ node_modules/ …
 ├─ .gitattributes            # 强制 LF（脚本在 macOS 上运行，CRLF 会坏）
 ├─ verify.sh                 # 仓库自检（不联网、不改文件）
@@ -78,6 +108,7 @@ dsh-mac-portable/
 │  ├─ fetch-runtime.sh       # 下载 + 校验 + 解压 Node 22.18.0 darwin-x64 → build/runtime
 │  ├─ fetch-dsh.sh           # npm i @deepseek-ai/dsh@next --os=darwin --cpu=x64 --ignore-scripts
 │  ├─ patch-sherpa-minos.py  # Mach-O LC_BUILD_VERSION.minos → 11.0.0（先备份）
+│  ├─ make-icns.py           # 自带图标：PNG → .icns（纯 Python 写容器，不依赖 iconutil）
 │  ├─ build-launcher.sh      # 生成 DSH.app/Contents/MacOS/DSH + Info.plist + 组装 runtime
 │  └─ make-dmg-or-zip.sh     # zip（默认）/ dmg（--dmg），排除 .DS_Store，保留 0755
 └─ docs/
@@ -95,13 +126,20 @@ build/
 └─ DSH.app/Contents/{MacOS/DSH,Info.plist,PkgInfo,Resources/runtime/…}
 dist/
 └─ DSH-Portable-0.1.0-macos11-x64.zip
+   ├─ DSH.app/…
+   ├─ LICENSES/{Apache-2.0,LGPL-3.0}.txt
+   └─ THIRD_PARTY_NOTICES.md
 ```
 
 ## 5. 产物与校验
 
 - 结构：`DSH.app/Contents/MacOS/DSH` 是 POSIX sh 启动器；`Contents/Resources/runtime/`
   内含 `node/` 与 `node_modules/`；`Contents/Info.plist` 由 `build-launcher.sh` 生成，
-  `CFBundleIdentifier` 为 `com.example.dsh-mac-portable`（**发布前改成你自己的反域名**）。
+  `CFBundleIdentifier` 默认 `io.github.<用户名>.dsh-mac-portable`（可用 `--bundle-id` 改，
+  且不得含 `deepseek`），版本号来自 `--version`。
+- 自定义图标：`python3 scripts/make-icns.py -s <你的 1024×1024 PNG> -o DSH.icns`
+  （需 `pip3 install Pillow`，不调用 macOS 的 `iconutil`），再把 `DSH.icns` 放进
+  `DSH.app/Contents/Resources/` 并在 `Info.plist` 设 `CFBundleIconFile=DSH`；仓库本身不带图标。
 - 启动器行为：解析自身真实路径 → 单实例检测（`instance.lock`）→ 以无参数（或
   `DSH_PORTABLE_ARGS`）起服务、由 DSH 自选端口 → 从日志管道里抓
   `http://127.0.0.1:<port>/?token=…` → 优先 Chrome/Edge/Firefox 打开 →
@@ -169,7 +207,10 @@ DSH 本身的更新、支持与安全响应均由上游负责。
 ## 11. English summary
 
 `dsh-mac-portable` is an **unofficial**, script-only repository that reproduces a
-macOS 11 Big Sur (Intel x64) bundle of DSH (DeepSeek Harness). It ships **no upstream
+macOS 11 Big Sur (Intel x64) bundle of DSH (DeepSeek Harness). `./make.sh` runs the
+five steps in order (`fetch-runtime`, `fetch-dsh`, `patch-sherpa-minos`,
+`build-launcher`, `make-dmg-or-zip`) and stops at the first failure with the step,
+exit code and next hint. It ships **no upstream
 bytes**: `scripts/fetch-runtime.sh` downloads the pinned Node.js 22.18.0 darwin-x64
 tarball and verifies its SHA256; `scripts/fetch-dsh.sh` installs the public npm package
 `@deepseek-ai/dsh@next` with `--os=darwin --cpu=x64 --ignore-scripts`;

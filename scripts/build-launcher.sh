@@ -23,6 +23,7 @@
 #   ./scripts/build-launcher.sh --skeleton      # metadata + launcher only
 #   ./scripts/build-launcher.sh --link          # symlink runtime (dev only)
 #   ./scripts/build-launcher.sh --dest /tmp/X.app --force
+#   ./scripts/build-launcher.sh --bundle-id io.github.me.dsh-mac-portable
 #
 # Options
 #   --dest PATH     output bundle path (default: build/DSH.app)
@@ -30,7 +31,11 @@
 #   --link          symlink build/runtime + build/node_modules instead of copying
 #                   (fast iteration; produces an app that only works in place)
 #   --force         replace an existing destination bundle
-#   --version X.Y.Z CFBundleShortVersionString (default: 0.1.0)
+#   --version X.Y.Z CFBundleShortVersionString + CFBundleVersion (default: 0.1.0),
+#                   also the default --version in make.sh
+#   --bundle-id ID  CFBundleIdentifier (default: io.github.<user>.dsh-mac-portable,
+#                   where <user> is $DSH_BUNDLE_USER or $USER, sanitised; a
+#                   literal "deepseek" in the identifier is rejected, see BRAND.md)
 #   -h, --help      show this help
 #
 # Exit codes
@@ -49,6 +54,8 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
 
 APP_VERSION="0.1.0"
+BUNDLE_ID="${DSH_BUNDLE_ID:-}"
+BUNDLE_USER="${DSH_BUNDLE_USER:-${USER:-}}"
 DEST="$ROOT/build/DSH.app"
 SKELETON=0
 LINK_RUNTIME=0
@@ -60,7 +67,7 @@ usage_die() { printf 'error: %s\n\n' "$*" >&2; usage >&2; exit 2; }
 usage() {
     cat <<'EOF'
 usage: build-launcher.sh [--dest PATH] [--skeleton] [--link] [--force]
-                         [--version X.Y.Z]
+                         [--version X.Y.Z] [--bundle-id ID]
 
 Builds DSH.app from build/runtime/node and build/node_modules.
 See the header of this script for the full description and exit codes.
@@ -76,6 +83,8 @@ while [ "$#" -gt 0 ]; do
         --force) FORCE=1; shift ;;
         --version) [ "$#" -ge 2 ] || usage_die "--version needs a value"; APP_VERSION=$2; shift 2 ;;
         --version=*) APP_VERSION=${1#*=}; shift ;;
+        --bundle-id) [ "$#" -ge 2 ] || usage_die "--bundle-id needs a value"; BUNDLE_ID=$2; shift 2 ;;
+        --bundle-id=*) BUNDLE_ID=${1#*=}; shift ;;
         -h|--help) usage; exit 0 ;;
         *) usage_die "unknown argument: $1" ;;
     esac
@@ -84,6 +93,30 @@ done
 case "$APP_VERSION" in
     [0-9]*.[0-9]*.[0-9]*) ;;
     *) usage_die "--version expects X.Y.Z, got: $APP_VERSION" ;;
+esac
+
+# Default identifier: io.github.<user>.dsh-mac-portable. The user part is taken
+# from $DSH_BUNDLE_USER/$USER and sanitised, so no real name or dot leaks in.
+if [ -z "$BUNDLE_ID" ]; then
+    if [ -z "$BUNDLE_USER" ]; then
+        BUNDLE_USER=$(id -un 2>/dev/null || printf 'user')
+    fi
+    BUNDLE_USER=$(printf '%s' "$BUNDLE_USER" \
+        | LC_ALL=C tr '[:upper:]' '[:lower:]' \
+        | LC_ALL=C tr -cd 'a-z0-9-')
+    [ -n "$BUNDLE_USER" ] || BUNDLE_USER=user
+    BUNDLE_ID="io.github.$BUNDLE_USER.dsh-mac-portable"
+fi
+case "$BUNDLE_ID" in
+    *.*) ;;
+    *) usage_die "--bundle-id must be a reverse-DNS identifier (got: $BUNDLE_ID)" ;;
+esac
+case "$BUNDLE_ID" in
+    *[!A-Za-z0-9.-]*) usage_die "--bundle-id may only contain A-Z a-z 0-9 . - (got: $BUNDLE_ID)" ;;
+    .*|*..*|*.) usage_die "--bundle-id must not start/end with '.' or contain '..' (got: $BUNDLE_ID)" ;;
+esac
+case "$(printf '%s' "$BUNDLE_ID" | LC_ALL=C tr '[:upper:]' '[:lower:]')" in
+    *deepseek*) usage_die "bundle id must not contain 'deepseek' (see BRAND.md): $BUNDLE_ID" ;;
 esac
 
 # Resolve a relative --dest against the caller's cwd, not against $ROOT.
@@ -138,7 +171,7 @@ cat > "$PLIST" <<PLIST_EOF
     <key>CFBundleExecutable</key>
     <string>DSH</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.dsh-mac-portable</string>
+    <string>${BUNDLE_ID}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -426,6 +459,7 @@ fi
 # --- report -----------------------------------------------------------------
 printf 'built: %s\n' "$DEST"
 printf '  version:   %s\n' "$APP_VERSION"
+printf '  bundle id: %s\n' "$BUNDLE_ID"
 printf '  launcher:  %s\n' "$EXE"
 if [ "$SKELETON" -eq 1 ]; then
     printf '  runtime:   (skeleton: not assembled)\n'

@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | 仓库名 | `dsh-mac-portable` | 只用缩写 DSH，不含完整商标 |
 | 应用包名 | `DSH.app`（显示名 **DSH Portable**） | `CFBundleName` / `CFBundleDisplayName` 均为 `DSH Portable` |
-| `CFBundleIdentifier` | `com.example.dsh-mac-portable` | **禁止** `ai.deepseek.*`、`com.deepseek.*`；发布前改成你自己的反域名 |
+| `CFBundleIdentifier` | `io.github.<user>.dsh-mac-portable`（默认，按 `$DSH_BUNDLE_USER`/`$USER` 生成；`--bundle-id` 可改） | **禁止** `ai.deepseek.*`、`com.deepseek.*` 或任何含 `deepseek` 的标识 |
 | 可执行文件名 | `Contents/MacOS/DSH` | 与 `CFBundleExecutable` 一致 |
 | 日志目录 | `~/Library/Logs/DSH-Portable/` | 不使用官方产品名 |
 | 环境变量前缀 | `DSH_PORTABLE_*` | 例如 `DSH_PORTABLE_BROWSER` |
@@ -45,9 +45,10 @@
 本仓库**不附带任何图标文件**（避免误用官方素材）。`build-launcher.sh` 不生成
 `.icns`，产物使用系统默认图标。若要自带图标：
 
-1. 自己绘制或用你有权使用的素材，导出 `icon.icns`；
-2. 放进 `DSH.app/Contents/Resources/icon.icns`，并在 `Info.plist` 增加
-   `<key>CFBundleIconFile</key><string>icon</string>`；
+1. 自己绘制或用你有权使用的素材，用 `python3 scripts/make-icns.py -s <你的 PNG> -o DSH.icns`
+   生成（需 Pillow；不依赖 macOS 的 `iconutil`）；
+2. 放进 `DSH.app/Contents/Resources/DSH.icns`，并在 `Info.plist` 增加
+   `<key>CFBundleIconFile</key><string>DSH</string>`；
 3. 确认图标里不含 DeepSeek 商标元素。
 
 ## 5. 自检（发布前跑一遍）

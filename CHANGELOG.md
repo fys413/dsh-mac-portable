@@ -5,10 +5,27 @@
 
 ## [Unreleased]
 
+### Added
+- **B 档一键构建**：根目录 `make.sh`（POSIX sh，`set -euo pipefail`，幂等）按序调用
+  `fetch-runtime` → `fetch-dsh` → `patch-sherpa-minos` → `build-launcher` →
+  `make-dmg-or-zip`，失败即停并打印步骤号、退出码与下一步提示；支持 `--skip-fetch`
+  `--clean` `--no-sign` `--sign` `--dmg` `--version` `--bundle-id` `--proxy`。
+- `scripts/build-launcher.sh`：`CFBundleIdentifier` 可配置（`--bundle-id`，默认
+  `io.github.<user>.dsh-mac-portable`，拒绝含 `deepseek`）；`--version` 同时写入
+  `CFBundleShortVersionString` 与 `CFBundleVersion`。
+- 合规文件：`THIRD_PARTY_NOTICES.md`（Node MIT、sherpa Apache-2.0 + `minos 15.0 → 11.0`
+  修改声明、libvips LGPL-3.0 源码要约与替换方法、其余依赖汇总）、`LICENSES/`
+  （Apache-2.0 与 LGPL-3.0 全文）；`make-dmg-or-zip.sh` 把三者放进 zip 根目录并在
+  重新打开 zip 时校验非空。
+- CI：`.github/workflows/verify.yml`（`macos-13`；`bash -n` 全部脚本 → `./verify.sh` →
+  只读 `./make.sh --help`；不跑完整构建）。
+- `verify.sh`：新增 make.sh 选项/步骤顺序、bundle id 默认值与校验、许可证文本与 notices、
+  CI 工作流检查；脚本清单扩到 make.sh 与全部构建脚本。
+
 ### 计划
-- B 档：把 `@next` 钉成精确版本 + `package-lock.json`；polyfill 改成 `patches/*.patch`
+- 把 `@next` 钉成精确版本 + `package-lock.json`；polyfill 改成 `patches/*.patch`
   并由 `apply-patches.sh` 幂等应用；GitHub Actions（`macos-13`）只出 artifact。
-- 在真实 Big Sur 机器上跑一遍构建产物并记录结果。
+- 在真实 Big Sur 机器上跑一遍构建产物并记录结果（B 档代码目前只在 Windows 上做过静态校验）。
 - 把 minos 与 Safari polyfill 两个问题反馈给上游。
 
 ## [0.1.0] — 2026-10-26

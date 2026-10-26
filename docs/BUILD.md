@@ -24,6 +24,61 @@ chmod +x scripts/*.sh verify.sh
 
 `chmod` 是必要的：从 zip 下载的仓库可能丢失可执行位。
 
+## B. 一键构建（B 档，推荐）
+
+装好 Xcode CLT 后，**一条命令**完成 §1–§6 的全部步骤：
+
+```sh
+chmod +x make.sh scripts/*.sh verify.sh   # 从 zip 下载的仓库可能丢失可执行位
+./make.sh
+```
+
+它按固定顺序调用 `scripts/fetch-runtime.sh` → `scripts/fetch-dsh.sh` →
+`scripts/patch-sherpa-minos.py` → `scripts/build-launcher.sh` →
+`scripts/make-dmg-or-zip.sh`，任一步失败立即停止。
+
+预期产物（全部在 `.gitignore` 内，**不要提交**）：
+
+| 路径 | 说明 |
+| --- | --- |
+| `build/DSH.app` | 可双击的应用（未签名，除非 `--sign`） |
+| `dist/DSH-Portable-0.1.0-macos11-x64.zip` | app + `LICENSES/` + `THIRD_PARTY_NOTICES.md` |
+| `dist/DSH-Portable-0.1.0-macos11-x64.dmg` | 仅 `--dmg`；卷内含同样的许可证文件 |
+| `dist/SHA256SUMS` | zip/dmg 的 SHA-256 |
+
+常用参数（`./make.sh --help` 查看全部，且**不写任何文件**）：
+
+```sh
+./make.sh --skip-fetch          # 复用 build/，离线重打包
+./make.sh --clean               # 先删 build/ dist/ 再全量构建
+./make.sh --sign                # ad-hoc 签名（codesign -s -），不做公证
+./make.sh --dmg                 # 额外产出 .dmg
+./make.sh --version 0.2.0       # 版本号写入 Info.plist 与产物名
+./make.sh --bundle-id io.github.me.dsh-mac-portable   # 默认按 $USER 生成
+./make.sh --proxy http://127.0.0.1:7890               # 下载 Node / npm 包走代理
+```
+
+退出码：`0` 成功；`1` 某个步骤失败（同时打印步骤号、子脚本退出码与下一步提示）；
+`2` 用法错误；`3` `--skip-fetch` 但 `build/` 不完整；`4` `--sign` 但系统没有 `codesign`。
+失败后可直接重跑（每一步幂等），或用 `--skip-fetch` 跳过已完成的下载。
+
+常见失败：
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 步骤 1 失败，`curl`/SHA256 报错 | 网络不通、代理未配、下载被截断 | 加 `--proxy`；`curl -I https://nodejs.org`；删 `build/runtime` 后重试 |
+| 步骤 2 失败，`E404`/`ETARGET` | `DSH_VERSION` 写错或 registry 不可达 | 不设 `DSH_VERSION` 用 `@next`，或换成存在的版本；检查 `npm ping` |
+| 步骤 3 失败，`python3 not found` | 没装 Xcode CLT | `xcode-select --install`，或 `PYTHON=/path/to/python3 ./make.sh` |
+| 步骤 3 失败，`LC_CODE_SIGNATURE` | 原生模块带签名，改字节会破坏签名 | 该包不需要降 minos 时跳过；确需修改用 `--force` 并重新签名 |
+| 步骤 4 失败，`missing runtime`/`missing npm payload` | `--skip-fetch` 但 `build/` 不完整 | 去掉 `--skip-fetch` 重跑，或先跑步骤 1/2 |
+| 步骤 5 失败，`missing compliance file` | `LICENSES/` 或 `THIRD_PARTY_NOTICES.md` 被删 | `git checkout -- LICENSES THIRD_PARTY_NOTICES.md` |
+| 步骤 5 失败，`hdiutil`/空间不足 | `--dmg` 需要额外磁盘与系统工具 | 去掉 `--dmg` 先出 zip；清理 `dist/` 后重试 |
+
+> CI（`.github/workflows/verify.yml`）只做静态检查 + `verify.sh` + `./make.sh --help`，
+> **不跑完整构建**：下载 Node 与整棵 npm 依赖树在共享 runner 上太慢且不稳定。
+
+下面的 §1–§6 是同一流程的手工分步版，便于定位问题和单独重跑。
+
 ## 1. 下载并校验 Node.js 运行时
 
 ```sh
@@ -122,8 +177,10 @@ cat build/BUILD-INFO.txt
 
 - 生成 `Contents/Info.plist`、`Contents/PkgInfo`、`Contents/MacOS/DSH`（POSIX sh），
   以及 `Contents/Resources/runtime/{node,node_modules}`。
-- 关键 plist 值：`CFBundleIdentifier=com.example.dsh-mac-portable`、
-  `LSMinimumSystemVersion=11.0`、显示名 `DSH Portable`（去品牌，见 [../BRAND.md](../BRAND.md)）。
+- 关键 plist 值：`CFBundleIdentifier` 默认 `io.github.<用户名>.dsh-mac-portable`
+  （`--bundle-id` 可改，且拒绝含 `deepseek` 的值）、`CFBundleShortVersionString`
+  与 `CFBundleVersion` 来自 `--version`、`LSMinimumSystemVersion=11.0`、显示名
+  `DSH Portable`（去品牌，见 [../BRAND.md](../BRAND.md)）。
 - 验证：
 
 ```sh
@@ -164,10 +221,15 @@ tail -n 20 ~/Library/Logs/DSH-Portable/portable.log
 ./scripts/make-dmg-or-zip.sh --dmg          # 额外生成 .dmg（hdiutil）
 ```
 
-- 产物：`dist/DSH-Portable-0.1.0-macos11-x64.zip`（约 237 MB）、可选 `.dmg`、`dist/SHA256SUMS`。
+- 产物：`dist/DSH-Portable-0.1.0-macos11-x64.zip`（约 237 MB，根目录另含
+  `LICENSES/` 与 `THIRD_PARTY_NOTICES.md`，不在 `.app` 内）、可选 `.dmg`（卷内同样附带
+  许可证文件）、`dist/SHA256SUMS`。
 - 脚本会：拒绝含符号链接的 bundle（`--link` 的产物）、删除 `.DS_Store`、强制 `0755`、
-  重开 zip 校验 `Contents/MacOS/DSH` 的可执行位、写 SHA256。
-- 退出码：`0` 成功，`1` 打包失败，`2` 用法错误，`3` bundle 不完整，`4` 缺 `zip`/`hdiutil`，`5` 校验失败，`6` 含符号链接。
+  检查 `LICENSES/Apache-2.0.txt`、`LICENSES/LGPL-3.0.txt`、`THIRD_PARTY_NOTICES.md`
+  非空、把三者加入 zip 根目录、重开 zip 校验 `Contents/MacOS/DSH` 的可执行位与许可证
+  文件非空、写 SHA256。
+- 退出码：`0` 成功，`1` 打包失败，`2` 用法错误，`3` bundle 不完整，`4` 缺 `zip`/`hdiutil`，
+  `5` 校验失败，`6` 含符号链接，`7` 缺合规文件。
 - **不要把 zip/dmg 提交进 git**：`.gitignore` 已忽略；GitHub 单文件上限 100 MiB，发布走 Release 附件或 Git LFS。
 
 ## 7. 仓库自检
@@ -177,8 +239,10 @@ tail -n 20 ~/Library/Logs/DSH-Portable/portable.log
 git status --porcelain   # 应为空
 ```
 
-`verify.sh` 检查：所有脚本 `bash -n`、Python 语法、文件清单体积（< 5 MB）、无 `node_modules`/`.asar`/Mach-O、
-无明文 token、Info.plist 品牌字段、README 非官方声明、大文件与构建产物未入库。
+`verify.sh` 检查：`make.sh` 与全部脚本 `bash -n`/`sh -n`、Python 语法、make.sh 选项与
+步骤顺序、文件清单体积（< 5 MB）、无 `node_modules`/`.asar`/Mach-O、无明文 token、
+bundle id 可配置且不含上游品牌、许可证全文与 notices、CI 工作流、README 非官方声明、
+大文件与构建产物未入库。
 
 ## 8. 可复现性说明
 
@@ -193,10 +257,12 @@ git status --porcelain   # 应为空
 ## 9. 清理重建
 
 ```sh
-rm -rf build dist
-./scripts/fetch-runtime.sh && ./scripts/fetch-dsh.sh && \
-./scripts/patch-sherpa-minos.py build/node_modules/sherpa-onnx-darwin-x64/sherpa-onnx.node && \
-./scripts/build-launcher.sh && ./scripts/make-dmg-or-zip.sh
+./make.sh --clean            # 等价于下面五条（--clean 先删 build/ dist/）
+# 或手工分步：
+# rm -rf build dist
+# ./scripts/fetch-runtime.sh && ./scripts/fetch-dsh.sh && \
+# ./scripts/patch-sherpa-minos.py build/node_modules/sherpa-onnx-darwin-x64/sherpa-onnx.node && \
+# ./scripts/build-launcher.sh && ./scripts/make-dmg-or-zip.sh
 ```
 
 以上命令全部在仓库目录内执行，不会修改系统目录之外的路径；`build/` 与 `dist/` 可随时删除重建。

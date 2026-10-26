@@ -7,16 +7,22 @@
 #      not `build-launcher.sh --link`);
 #   2. strips .DS_Store / ._* and forces 0755 on the launcher and on
 #      runtime/node/bin/node so the archive keeps its executable bits;
-#   3. creates dist/<name>.zip with `ditto` when available, else `zip -qry`;
+#   3. creates dist/<name>.zip with `ditto` when available, else `zip -qry`,
+#      then adds LICENSES/ and THIRD_PARTY_NOTICES.md at the zip root (next to
+#      DSH.app, never inside it) -- Apache-2.0 4(a) and LGPL-3.0 require the
+#      licence texts to travel with the binaries;
 #   4. re-opens the zip and asserts that Contents/MacOS/DSH is stored with an
-#      executable mode (zips built on other platforms often lose it);
-#   5. writes dist/SHA256SUMS and, with --dmg, a compressed UDZO disk image.
+#      executable mode and that the two licence texts and the notices are
+#      present and non-empty;
+#   5. writes dist/SHA256SUMS and, with --dmg, a compressed UDZO disk image
+#      whose volume also contains LICENSES/ and THIRD_PARTY_NOTICES.md.
 #
 # Prerequisites
 #   macOS 11+ on Intel x64; scripts/build-launcher.sh produced a bundle; `zip`
 #   plus either `ditto` (preferred) or `zip`; `shasum` (or sha256sum); python3
-#   for the mode check (Xcode CLT provides it; the check is skipped with a
-#   warning if no Python is found).
+#   for the archive check (Xcode CLT provides it; the check is skipped with a
+#   warning if no Python is found). LICENSES/ and THIRD_PARTY_NOTICES.md must
+#   exist in the repository root.
 #
 # Usage
 #   ./scripts/make-dmg-or-zip.sh
@@ -37,8 +43,9 @@
 #   2  usage error
 #   3  input bundle missing or incomplete
 #   4  required tool missing (zip / hdiutil)
-#   5  artifact verification failed (executable bit lost)
+#   5  artifact verification failed (executable bit or licence files lost)
 #   6  bundle contains symlinks
+#   7  repository compliance files (LICENSES/, THIRD_PARTY_NOTICES.md) missing
 #
 # Licence: MIT (see LICENSE). Original to dsh-mac-portable, no upstream code.
 set -euo pipefail
@@ -98,6 +105,16 @@ if [ ! -f "$APP/Contents/Resources/runtime/node_modules/@deepseek-ai/dsh/lib/bin
     printf 'warning: runtime payload missing from the bundle; packaging a stub\n' >&2
 fi
 
+# --- compliance inputs ------------------------------------------------------
+for f in "$ROOT/LICENSES/Apache-2.0.txt" "$ROOT/LICENSES/LGPL-3.0.txt" \
+         "$ROOT/THIRD_PARTY_NOTICES.md"; do
+    if [ ! -s "$f" ]; then
+        printf 'error: missing compliance file: %s\n' "$f" >&2
+        printf 'hint: restore LICENSES/ and THIRD_PARTY_NOTICES.md from git\n' >&2
+        exit 7
+    fi
+done
+
 # --- refuse symlinks --------------------------------------------------------
 LINK=$(find "$APP" -type l -print 2>/dev/null | head -n 1)
 if [ -n "$LINK" ]; then
@@ -139,7 +156,14 @@ else
 fi
 [ -s "$ZIP" ] || die "zip was not created: $ZIP"
 
-# --- verify the executable bit survived ------------------------------------
+# --- add licence texts + notices at the archive root ------------------------
+# They sit next to <app>/ inside the zip, never inside the .app bundle, so the
+# app stays a plain executable bundle while the archive carries the notices
+# required by Apache-2.0 4(a) and LGPL-3.0.
+( cd "$ROOT" && zip -qry "$ZIP" LICENSES THIRD_PARTY_NOTICES.md ) \
+    || die "failed to add LICENSES/ and THIRD_PARTY_NOTICES.md to $ZIP"
+
+# --- verify the archive -----------------------------------------------------
 PYTHON=""
 for candidate in python3 python; do
     if command -v "$candidate" >/dev/null 2>&1; then PYTHON=$candidate; break; fi
@@ -151,27 +175,57 @@ import sys
 import zipfile
 
 zip_path, app_base = sys.argv[1], sys.argv[2]
-want = app_base + "/Contents/MacOS/DSH"
+launcher = app_base + "/Contents/MacOS/DSH"
+required_texts = [
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSES/Apache-2.0.txt",
+    "LICENSES/LGPL-3.0.txt",
+]
+
 with zipfile.ZipFile(zip_path) as zf:
     names = zf.namelist()
-    if want not in names:
-        sys.exit("verification failed: %s missing from the archive" % want)
-    mode = zf.getinfo(want).external_attr >> 16
+    if launcher not in names:
+        sys.exit("verification failed: %s missing from the archive" % launcher)
+    mode = zf.getinfo(launcher).external_attr >> 16
     if not stat.S_ISREG(mode) or not (mode & 0o111):
         sys.exit("verification failed: %s stored without an executable mode (%o)"
-                 % (want, mode & 0o777))
-print("verified: %s is executable inside the zip" % want)
+                 % (launcher, mode & 0o777))
+    for name in required_texts:
+        if name not in names:
+            sys.exit("verification failed: %s missing from the archive root" % name)
+        if not zf.read(name).strip():
+            sys.exit("verification failed: %s is empty in the archive" % name)
+print("verified: %s is executable and the licence files are present" % launcher)
 PY_EOF
 else
-    printf 'warning: no python3/python found; skipped the zip mode check\n' >&2
+    printf 'warning: no python3/python found; skipped the zip mode/licence check\n' >&2
 fi
 
 # --- optional dmg -----------------------------------------------------------
+# The volume must carry the same licence texts as the zip, but hdiutil packs a
+# whole folder, so stage <app> + LICENSES/ + THIRD_PARTY_NOTICES.md in a
+# scratch directory first. Hard links keep this cheap when build/ and the
+# bundle live on the same volume; fall back to a real copy otherwise.
 if [ "$WANT_DMG" -eq 1 ]; then
     command -v hdiutil >/dev/null 2>&1 || { printf 'error: hdiutil not found\n' >&2; exit 4; }
+    STAGE="$ROOT/build/dmg-stage"
+    rm -rf "$STAGE"
+    mkdir -p "$STAGE"
+    if ! cp -Rl "$APP" "$STAGE/" 2>/dev/null; then
+        rm -rf "$STAGE/$APP_BASE"
+        cp -R "$APP" "$STAGE/" || die "failed to stage $APP for the dmg"
+    fi
+    cp -R "$ROOT/LICENSES" "$STAGE/LICENSES" \
+        || die "failed to stage LICENSES/ for the dmg"
+    cp "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/THIRD_PARTY_NOTICES.md" \
+        || die "failed to stage THIRD_PARTY_NOTICES.md for the dmg"
     rm -f "$DMG"
-    hdiutil create -quiet -volname "DSH Portable" -srcfolder "$APP" \
-        -ov -format UDZO "$DMG" >/dev/null
+    if ! hdiutil create -quiet -volname "DSH Portable" -srcfolder "$STAGE" \
+            -ov -format UDZO "$DMG" >/dev/null; then
+        rm -rf "$STAGE"
+        die "hdiutil failed to create $DMG"
+    fi
+    rm -rf "$STAGE"
     [ -s "$DMG" ] || die "dmg was not created: $DMG"
 fi
 
@@ -197,4 +251,6 @@ if [ "$WANT_DMG" -eq 1 ]; then
     printf '  dmg: %s (%s)\n' "$DMG" "$(du -h "$DMG" | awk '{print $1}')"
 fi
 printf '  sums: %s\n' "$SHA256SUMS"
+printf 'contents: %s + LICENSES/ + THIRD_PARTY_NOTICES.md\n' "$APP_BASE"
+[ "$WANT_DMG" -eq 1 ] && printf '          the dmg volume carries the same licence files\n'
 printf 'next: attach these files to a GitHub Release (never git add them)\n'

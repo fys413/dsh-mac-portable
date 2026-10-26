@@ -67,8 +67,8 @@ DeepSeek; this project only uses the abbreviation "DSH" in its name.
 "DeepSeek Harness" 是 DeepSeek 的注册商标。本项目：
 
 - 项目名只用缩写 **DSH**（`dsh-mac-portable`），不使用完整商标作为项目名；
-- 应用名用 **DSH Portable**，`CFBundleIdentifier` 使用 `com.example.dsh-mac-portable`
-  （不含 `ai.deepseek.*`，用户应改成自己的反域名）；
+- 应用名用 **DSH Portable**，`CFBundleIdentifier` 默认 `io.github.<user>.dsh-mac-portable`
+  （由 `$DSH_BUNDLE_USER`/`$USER` 生成，可用 `--bundle-id` 覆盖；不含 `deepseek`）；
 - 不使用官方图标/官方视觉素材；
 - 在 README、应用内提示、发布说明中显式声明"非官方"。
 

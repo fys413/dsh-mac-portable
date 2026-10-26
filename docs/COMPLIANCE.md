@@ -31,7 +31,7 @@ compatibility. No other bytes were changed. See scripts/patch-sherpa-minos.py.
 EOF
 ```
 
-B. 若改走 B 档（随仓库分发二进制），把上述 `LICENSE`/`NOTICE` 一并纳入发布物，并在 Release notes 写明修改。
+B. 若你在 GitHub Release / 其他渠道分发构建产物，把上述 `LICENSE`/`NOTICE` 一并纳入发布物，并在 Release notes 写明修改。
 
 **验证**：
 
@@ -133,4 +133,12 @@ for (const d of fs.readdirSync(root)) {
 
 ## 6. 与商标/品牌相关的合规
 
-品牌规则单独写在 [../BRAND.md](../BRAND.md)：项目名使用缩写 `dsh-mac-portable`，显示名 `DSH Portable`，bundle id `com.example.dsh-mac-portable`，不附官方图标，必须保留“非官方”声明。商标合规与许可证合规是两件事，需同时满足。
+品牌规则单独写在 [../BRAND.md](../BRAND.md)：项目名使用缩写 `dsh-mac-portable`，显示名 `DSH Portable`，bundle id 默认 `io.github.<user>.dsh-mac-portable`（`--bundle-id` 可改，禁止含 `deepseek`），不附官方图标，必须保留“非官方”声明。商标合规与许可证合规是两件事，需同时满足。
+
+## 7. B 档（`./make.sh`）产物里的合规文件
+
+`./make.sh` 生成 zip/dmg 时自动把 `LICENSES/Apache-2.0.txt`、`LICENSES/LGPL-3.0.txt`
+与 `THIRD_PARTY_NOTICES.md` 放到**压缩包根目录**（与 `DSH.app` 同级，不进入 `.app`），
+DMG 卷内同样附带；`make-dmg-or-zip.sh` 会重开 zip 校验三者存在且非空，缺文件则退出码 7。
+各组件义务与修改声明（sherpa `minos 15.0 → 11.0`、前端 polyfill、libvips 源码要约）
+汇总在 [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)，发布前逐项复核本文 §5。
