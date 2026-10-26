@@ -1,0 +1,24 @@
+# ---- build output (never committed: this repo ships scripts and docs only) ----
+build/
+dist/
+DSH.app/
+
+# ---- archives / images ----
+*.dmg
+*.zip
+
+# ---- dependency trees (fetched at build time) ----
+node_modules/
+
+# ---- macOS / editor / OS noise ----
+.DS_Store
+._*
+*.log
+
+# ---- python bytecode ----
+__pycache__/
+*.pyc
+
+# ---- local backups made by the build scripts ----
+*.orig
+*.minos-backup

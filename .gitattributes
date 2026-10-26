@@ -1,0 +1,10 @@
+# Keep every text file LF in the working tree: these scripts run on macOS and
+# CRLF would break `#!/bin/sh` and `set -euo pipefail`.
+* text=auto
+*.sh       text eol=lf
+*.py       text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+LICENSE    text eol=lf
+NOTICE.md  text eol=lf
+.gitignore text eol=lf
