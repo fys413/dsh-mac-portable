@@ -10,11 +10,10 @@ permissions:
 
 jobs:
   verify:
-    # macos-13 (Ventura, Intel) matches the project's Big Sur/Intel target, but
-    # GitHub retired that image on 2025-12-04. If the job never leaves the
-    # queue, switch to macos-15-intel (still x86_64): these checks do not
-    # depend on the macOS version.
-    runs-on: macos-13
+    # macos-15-intel is the current x86_64 image. These checks do not depend on
+    # the macOS version; if the job ever stops being scheduled, any macos-*
+    # Intel label (e.g. macos-26-intel) works as well.
+    runs-on: macos-15-intel
     timeout-minutes: 10
 
     steps:
