@@ -8,6 +8,8 @@
 仓库里只有**自产脚本、补丁和文档**：不含上游任何源码、npm 包、二进制、`.asar`、`.app`、
 `.zip`；构建时所需的字节全部由脚本从公开来源（nodejs.org、registry.npmjs.org）下载。
 
+![DSH 在 macOS Big Sur 上运行（Chrome 驱动 Web UI）](docs/screenshot.png)
+
 *This repository contains build scripts and documentation only — no upstream code,
 npm packages, or binaries. It builds an **unofficial** DSH bundle for macOS 11 Big Sur
 on Intel x64 by downloading the official npm package at build time.*
