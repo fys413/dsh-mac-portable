@@ -353,10 +353,11 @@ fi
 # --- 10. CI workflow --------------------------------------------------------
 section "CI workflow"
 CI_FILE=.github/workflows/verify.yml
-if grep -q 'runs-on: macos-13' "$CI_FILE"; then
-    pass "CI runs on macos-13"
+if grep -qE 'runs-on: macos-(13|14|15|26)(-intel)?$' "$CI_FILE" \
+        && ! grep -q 'runs-on: macos-13$' "$CI_FILE"; then
+    pass "CI runs on a supported macOS runner (not retired macos-13)"
 else
-    fail "CI does not pin runs-on: macos-13"
+    fail "CI must use a supported macOS runner, not retired macos-13"
 fi
 if grep -q 'push, pull_request' "$CI_FILE"; then
     pass "CI triggers on push and pull_request"

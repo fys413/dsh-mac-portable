@@ -76,8 +76,8 @@ chmod +x make.sh scripts/*.sh verify.sh   # 从 zip 下载的仓库可能丢失�
 
 > CI（`.github/workflows/verify.yml`）只做静态检查 + `verify.sh` + `./make.sh --help`，
 > **不跑完整构建**：下载 Node 与整棵 npm 依赖树在共享 runner 上太慢且不稳定。
-> 工作流按任务要求固定 `runs-on: macos-13`；GitHub 已于 2025-12-04 退役该镜像，
-> 若 run 长期停在 queued，把这一行换成 `macos-15-intel`（仍是 x86_64）即可，
+> 工作流使用 `runs-on: macos-15-intel`（x86_64）。GitHub 已于 2025-12-04 退役
+> `macos-13`，若该标签也不再可用，换成任一 Intel 标签（如 `macos-26-intel`）即可，
 > 检查项本身不依赖 macOS 版本。
 
 下面的 §1–§6 是同一流程的手工分步版，便于定位问题和单独重跑。
