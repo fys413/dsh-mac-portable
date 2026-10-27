@@ -10,13 +10,11 @@
 
 ![DSH 在 macOS Big Sur 上运行（Chrome 驱动 Web UI）](docs/screenshot.png)
 
+*在 macOS 上运行 `DSH.app` 后，由启动器在 `127.0.0.1` 随机端口拉起、用浏览器打开的会话界面。*
+
 *This repository contains build scripts and documentation only — no upstream code,
 npm packages, or binaries. It builds an **unofficial** DSH bundle for macOS 11 Big Sur
 on Intel x64 by downloading the official npm package at build time.*
-
-![screenshot](docs/screenshot.png)
-
-*在 macOS 上运行 `DSH.app` 后，由启动器在 `127.0.0.1` 随机端口拉起、用浏览器打开的会话界面。*
 
 - 许可：[MIT](LICENSE)（自产部分）
 - 目标系统：**macOS 11.0 Big Sur 及以上，仅 Intel x64**（Apple Silicon 需 Rosetta 2，未验证）
